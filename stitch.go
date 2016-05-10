@@ -88,6 +88,7 @@ func createBaseImage() image.Image {
 
 func readImage(path string) image.Image {
 	file, err := os.Open(path)
+	defer file.Close()
 
 	if err != nil {
 		log.Fatal(err)
