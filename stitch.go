@@ -35,19 +35,24 @@ func main() {
 		log.Fatal(err)
 	}
 
-	base := createBaseImage()
+	selected := filter(files, nth)
+	domain := image.Rect(0, 0, 0, 0)
 
-	counter := 0.0
-	for _, f := range files {
-		ext := filepath.Ext(f.Name())
-		if ext == ".png" || ext == ".jpg" {
-			counter = counter + 1
-			if math.Mod(counter, float64(nth)) == 0 {
-				log.Printf("Sitching %s", f.Name())
-				img := readImage(filepath.Join(src, f.Name()))
-				base = stitch(base, img)
-			}
-		}
+	for _, f := range selected {
+		img := readImage(filepath.Join(src, f.Name()))
+		domain = precalcSize(domain, img)
+	}
+
+	base := createBaseImage(domain)
+
+	bh := 0
+
+	log.Printf("Creating an image %d x %d pixels", base.Bounds().Dx(), base.Bounds().Dy())
+
+	for _, f := range selected {
+		log.Printf("Sitching %s", f.Name())
+		img := readImage(filepath.Join(src, f.Name()))
+		bh, base = stitch(bh, base, img)
 	}
 
 	o, err := os.Create(out)
@@ -60,29 +65,47 @@ func main() {
 	log.Printf("Wrote to %s", out)
 }
 
-func stitch(base, new image.Image) image.Image {
-	bh := base.Bounds().Dy()
-	bw := base.Bounds().Dx()
+func filter(files []os.FileInfo, nth int) []os.FileInfo {
+	out := []os.FileInfo{}
+
+	counter := 0.0
+	for _, f := range files {
+		ext := filepath.Ext(f.Name())
+		if ext == ".png" || ext == ".jpg" {
+			counter = counter + 1
+			if math.Mod(counter, float64(nth)) == 0 {
+				out = append(out, f)
+			}
+		}
+	}
+
+	return out
+}
+
+func precalcSize(r image.Rectangle, new image.Image) image.Rectangle {
+	bh := r.Dy()
+	bw := r.Dx()
 
 	nh := new.Bounds().Dy()
 	nw := new.Bounds().Dx()
 
 	w := max(nw, bw)
 
-	nr := image.Rect(0, 0, w, bh+nh)
-	r := image.NewRGBA(nr)
-
-	draw.Draw(r, base.Bounds(), base, image.Point{0, 0}, draw.Src)
-
-	rc2 := image.Rect(0, bh, nw, bh+nh)
-	draw.Draw(r, rc2, new, image.Point{0, 0}, draw.Src)
-
-	return r
+	return image.Rect(0, 0, w, bh+nh)
 }
 
-func createBaseImage() image.Image {
-	r := image.Rect(0, 0, 1, 1)
-	img := image.NewRGBA(r)
+func stitch(bh int, base *image.RGBA, new image.Image) (int, *image.RGBA) {
+	nh := new.Bounds().Dy()
+	nw := new.Bounds().Dx()
+
+	rc2 := image.Rect(0, bh, nw, bh+nh)
+	draw.Draw(base, rc2, new, image.Point{0, 0}, draw.Src)
+
+	return bh + nh, base
+}
+
+func createBaseImage(domain image.Rectangle) *image.RGBA {
+	img := image.NewRGBA(domain)
 	return img
 }
 
